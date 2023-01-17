@@ -11,14 +11,14 @@ import "core:intrinsics"
 import "core:runtime"
 import "core:testing"
 
-when ODIN_OS == .Windows { foreign import gc "libgc.lib" }
-when ODIN_OS != .Windows { foreign import gc "system:gc" }
+when ODIN_OS == .Windows { foreign import libgc "libgc.lib" }
+when ODIN_OS != .Windows { foreign import libgc "system:gc" }
 
 warn_proc :: proc "c" (^c.char, c.ulong)
 
 @(link_prefix="GC_")
 @(default_calling_convention="c")
-foreign gc {
+foreign libgc {
 	// Allocates and clears nbytes of storage. Requires (amortized) time proportional to nbytes.
 	// The resulting object will be automatically deallocated when unreferenced.
 	// References from objects allocated with the system malloc are usually not considered by the collector.
@@ -50,16 +50,6 @@ foreign gc {
 	// Explicitly deallocate an object. Typically not useful for small collectable objects. 
 	free :: proc(ptr: rawptr) ---
 
-	// Explicitly force a garbage collection.
-	gcollect :: proc() ---
-
-	// Cause the garbage collector to perform a small amount of work every few invocations of GC_MALLOC or the like,
-	// instead of performing an entire collection at once. This is likely to increase total running time.
-	// It will improve response on a platform that either has suitable support in the garbage collector
-	// (Linux and most Unix versions, win32 if the collector was suitably built) or if "stubborn" allocation is used (see gc.h).
-	// On many platforms this interacts poorly with system calls that write to the garbage collected heap. 
-	enable_incremental :: proc() ---
-
 	// Replace the default procedure used by the collector to print warnings.
 	// The collector may otherwise write to sterr, most commonly because GC_malloc was used in a situation in
 	// which GC_malloc_ignore_off_page would have been more appropriate. See gc.h for details.
@@ -68,9 +58,11 @@ foreign gc {
 }
 
 @(private)
-foreign gc {
-	// TODO: We might need to replace this call with the GC_INIT macro on some platforms. :(
-	GC_init :: proc "c" () ---
+@(default_calling_convention="c")
+foreign libgc {
+	GC_init :: proc() --- // TODO: We might need to replace this call with the GC_INIT macro on some platforms. :(
+	GC_gcollect :: proc() ---
+	GC_enable_incremental :: proc() ---
 }
 
 @(private)
@@ -90,7 +82,7 @@ do_alloc :: proc(mode: runtime.Allocator_Mode, size, alignment: int, old_memory:
 			free(old_memory)
 			return nil, .None
 		case .Free_All:
-			gcollect()
+			GC_gcollect()
 			return nil, .None
 		case .Resize:
 			p := realloc(old_memory, c.size_t(size))
@@ -125,9 +117,27 @@ uncollectable_allocator :: mem.Allocator{ procedure = proc(allocator_data: rawpt
 
 // On some platforms, it is necessary to invoke this from the main executable,
 // not from a dynamic library, before the initial invocation of a GC routine.
-initialize :: proc() {
+// Setting 'incremental = true' causes the garbage collector to perform a small amount of work
+// every few invocations of GC_MALLOC or the like, instead of performing an entire collection at once.
+// This is likely to increase total running time. It will improve response on a platform that either has
+// suitable support in the garbage collector (Linux and most Unix versions, win32 if the collector was suitably built)
+// or if "stubborn" allocation is used (see gc.h). On many platforms this interacts poorly with system calls
+// that write to the garbage collected heap. 
+initialize :: proc(incremental := false) -> runtime.Context {
 	GC_init()
 	set_warn_proc(proc "c" (^c.char, c.ulong) {}) // Disable logging by default
+	if (incremental) {
+		GC_enable_incremental()
+	}
+	ctx := context // Create a copy of the context.
+	ctx.allocator = allocator
+	ctx.temp_allocator = allocator
+	return ctx
+}
+
+// Explicitly force a garbage collection.
+collect :: proc() {
+	GC_gcollect()
 }
 
 sprint :: proc(args: ..any, sep: string = " ") -> string {
@@ -143,26 +153,4 @@ sprintln :: proc(args: ..any, sep: string = " ") -> string {
 sprintf :: proc(format: string, args: ..any) -> string {
 	context.allocator = atomic_allocator
 	return fmt.aprintf(format, ..args)
-}
-
-// TODO: Add real tests.
-
-@(test)
-test_init :: proc(^testing.T) {
-	initialize()
-}
-
-@(test)
-test_simple :: proc(^testing.T) {
-	initialize()
-	sprint("Hello", "World")
-	gcollect()
-}
-
-@(test)
-test_free :: proc(^testing.T) {
-    ptr := malloc(16)
-	gcollect()
-    free(ptr)
-	gcollect()
 }

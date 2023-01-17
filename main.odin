@@ -4,17 +4,29 @@ import "core:fmt"
 import "gc"
 
 main :: proc() {
-    gc.initialize()
+    // Initialize the collector and set the main context.
+    // All allocations are now handled by the garbage collector.
+    context = gc.initialize()
     
+    // The gc string functions always uses the atomic allocator.
     join := gc.sprint("Hello", "World")
     fmt.println(join)
 
-    {
-        context.allocator = gc.allocator
-        str := fmt.aprint("foo", "bar")
-        fmt.println(str)
-    }
+    // fmt a* functions will use standard gc allocator in this case.
+    str := fmt.aprint("foo", "bar")
+    fmt.println(str)
 
     bytes := gc.malloc(16)
     fmt.println("Raw pointer", bytes)
+    
+    fmt.print("Lots of allocations")
+    for i in 0..<100 {
+        // Allocate 1Gb in 1Mb blocks.
+        array: [dynamic]rawptr
+        for j in 0..<1024 {
+            append(&array, gc.malloc(1024 * 1024))
+        }
+        fmt.print(".")
+    }
+    fmt.print("\n")
 }
