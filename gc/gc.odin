@@ -7,6 +7,7 @@ import "core:c"
 import "core:fmt"
 import "core:mem"
 import "core:slice"
+import "core:intrinsics"
 import "core:runtime"
 import "core:testing"
 
@@ -74,7 +75,7 @@ foreign gc {
 
 @(private)
 do_alloc :: proc(mode: runtime.Allocator_Mode, size, alignment: int, old_memory: rawptr, $func: proc "c" (size: c.size_t) -> rawptr) -> ([]u8, runtime.Allocator_Error) {
-	if alignment > size_of(rawptr) {
+	if alignment > size_of(rawptr) || intrinsics.count_ones(alignment) != 1 {
 		return nil, .Invalid_Argument
 	}
 
