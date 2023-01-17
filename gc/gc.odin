@@ -67,15 +67,9 @@ foreign gc {
 }
 
 @(private)
-@(default_calling_convention="c")
 foreign gc {
-	// On some platforms, it is necessary to invoke this from the main executable, not from a dynamic library,
-	// before the initial invocation of a GC routine. It is recommended that this be done in portable code,
-	// though we try to ensure that it expands to a no-op on as many platforms as possible.
-	// In GC 7.0, it was required if thread-local allocation is enabled in the collector build, and malloc is not redirected to GC_malloc.
-	//
 	// TODO: We might need to replace this call with the GC_INIT macro on some platforms. :(
-	GC_init :: proc() ---
+	GC_init :: proc "c" () ---
 }
 
 @(private)
@@ -128,6 +122,8 @@ uncollectable_allocator :: mem.Allocator{ procedure = proc(allocator_data: rawpt
 	return do_alloc(mode, size, alignment, old_memory, malloc_uncollectable)
 }}
 
+// On some platforms, it is necessary to invoke this from the main executable,
+// not from a dynamic library, before the initial invocation of a GC routine.
 initialize :: proc() {
 	GC_init()
 	set_warn_proc(proc "c" (^c.char, c.ulong) {}) // Disable logging by default
