@@ -1,2 +1,2 @@
 # odin-libgc
-Garbage collection for the Odin language
+This is a simple library wrapper for libgc, providing garbage collection to the Odin programming language.
