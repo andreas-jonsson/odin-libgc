@@ -1,18 +1,18 @@
 package main
 
-import "core:fmt"
 import "gc"
+import "core:fmt"
 
 main :: proc() {
     // Initialize the collector and set the main context.
     // All allocations are now handled by the garbage collector.
     context = gc.initialize()
     
-    // The gc string functions always uses the atomic allocator.
+    // The GC string functions always uses the atomic allocator.
     join := gc.sprint("Hello", "World")
     fmt.println(join)
 
-    // fmt a* functions will use standard gc allocator in this case.
+    // fmt.a* functions will use standard GC allocator in this case.
     str := fmt.aprint("foo", "bar")
     fmt.println(str)
 
