@@ -30,7 +30,7 @@ test_free :: proc(_: ^testing.T) {
 
 @(test)
 test_incremental :: proc(_: ^testing.T) {
-	initialize(true)
+	context = initialize(true)
 	for i in 0 ..< 1024 {
 		array: [dynamic]rawptr
 		for j in 0 ..< 1024 {
